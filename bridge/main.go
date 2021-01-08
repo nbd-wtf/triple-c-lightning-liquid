@@ -27,6 +27,10 @@ func main() {
 				"htlc_accepted",
 				htlc_accepted,
 			},
+			{
+				"custommsg",
+				custommsg,
+			},
 		},
 		RPCMethods: []plugin.RPCMethod{
 			{

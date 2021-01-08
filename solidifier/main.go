@@ -35,6 +35,12 @@ func main() {
 				bitcoin_pay,
 			},
 		},
+		Hooks: []plugin.Hook{
+			{
+				"custommsg",
+				custommsg,
+			},
+		},
 		OnInit: func(p *plugin.Plugin) {
 			bridgeID := p.Args["tcll-bridge-id"].(string)
 
