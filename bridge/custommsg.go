@@ -21,12 +21,15 @@ func custommsg(p *plugin.Plugin, params plugin.Params) (resp interface{}) {
 		if err != nil {
 			p.Logf("got invalid cbor on getroute")
 		} else {
-			res, err := that.Call("getroute", params)
+			getRoute, err := that.Call("getroute", params)
 			if err != nil {
 				p.Logf("fail to getroute: %s", err)
 			}
 
-			route, _ := cbor.Dumps(res)
+			route, _ := cbor.Dumps(getRoute.Get("route").Value())
+
+			// add bridge fee TODO
+
 			payload := ROUTEREPLY_MESSAGE + hex.EncodeToString(route)
 			this.Call("dev-sendcustommsg", peer, payload)
 		}
