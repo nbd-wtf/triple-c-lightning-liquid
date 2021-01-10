@@ -3,7 +3,7 @@ package main
 import (
 	"encoding/hex"
 	"encoding/json"
-	"errors"
+	"fmt"
 	"time"
 
 	cbor "github.com/brianolson/cbor_go"
@@ -17,10 +17,16 @@ const ROUTEREPLY_MESSAGE = "9aa3"
 
 var bitcoinHopsChan = make(chan gjson.Result)
 
-func bitcoin_pay(p *plugin.Plugin, params plugin.Params) (interface{}, int, error) {
+func getBitcoinRoute(
+	p *plugin.Plugin,
+	params gjson.Result,
+) (interface{}, *lightning.ErrorCommand) {
 	inv, err := p.Client.Call("decodepay", params.Get("bolt11").String())
 	if err != nil {
-		return nil, -1, err
+		return nil, &lightning.ErrorCommand{
+			Code:    -1,
+			Message: fmt.Sprintf("failed to decode invoice: %s", err.Error()),
+		}
 	}
 
 	msatoshiToPay := inv.Get("msatoshi").Int()
@@ -50,7 +56,10 @@ func bitcoin_pay(p *plugin.Plugin, params plugin.Params) (interface{}, int, erro
 			"riskfactor": 10,
 		})
 		if err != nil {
-			return nil, -1, errors.New("couldn't find a route from us to bridge.")
+			return nil, &lightning.ErrorCommand{
+				Code:    -1,
+				Message: "Couldn't find a route from us to bridge.",
+			}
 		}
 		liquidHops := liquidRoute.Get("route")
 		liquidHopsLen := int(liquidHops.Get("#").Int())
@@ -81,26 +90,16 @@ func bitcoin_pay(p *plugin.Plugin, params plugin.Params) (interface{}, int, erro
 			}
 		}
 
-		// send payment
-		resp, err := p.Client.Call("sendpay", allHops,
-			inv.Get("payment_hash").String(),
-			inv.Get("label").String(),
-			msatoshiToPay,
-			params.Get("bolt11").String(),
-			inv.Get("payment_secret").String())
-		if err != nil {
-			if errc, ok := err.(lightning.ErrorCommand); ok {
-				return nil, errc.Code, errc
-			}
-			return nil, 120, err
-		}
-		return resp.Value(), 0, nil
+		return map[string]interface{}{"route": allHops}, nil
 
 	case <-time.After(time.Second * 3):
 		// no route.
 	}
 
-	return nil, 119, errors.New("didn't get a route reply from bridge.")
+	return nil, &lightning.ErrorCommand{
+		Code:    -1,
+		Message: "Bridge took too long to reply with a route.",
+	}
 }
 
 func custommsg(p *plugin.Plugin, params plugin.Params) (resp interface{}) {
