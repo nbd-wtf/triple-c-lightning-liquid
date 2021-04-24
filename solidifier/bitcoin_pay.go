@@ -3,7 +3,7 @@ package main
 import (
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
+	"errors"
 	"time"
 
 	cbor "github.com/brianolson/cbor_go"
@@ -17,16 +17,10 @@ const ROUTEREPLY_MESSAGE = "9aa3"
 
 var bitcoinHopsChan = make(chan gjson.Result)
 
-func getBitcoinRoute(
-	p *plugin.Plugin,
-	params gjson.Result,
-) (interface{}, *lightning.ErrorCommand) {
+func bitcoin_pay(p *plugin.Plugin, params plugin.Params) (interface{}, int, error) {
 	inv, err := p.Client.Call("decodepay", params.Get("bolt11").String())
 	if err != nil {
-		return nil, &lightning.ErrorCommand{
-			Code:    -1,
-			Message: fmt.Sprintf("failed to decode invoice: %s", err.Error()),
-		}
+		return nil, -1, err
 	}
 
 	msatoshiToPay := inv.Get("msatoshi").Int()
@@ -56,10 +50,7 @@ func getBitcoinRoute(
 			"riskfactor": 10,
 		})
 		if err != nil {
-			return nil, &lightning.ErrorCommand{
-				Code:    -1,
-				Message: "Couldn't find a route from us to bridge.",
-			}
+			return nil, -1, errors.New("couldn't find a route from us to bridge.")
 		}
 		liquidHops := liquidRoute.Get("route")
 		liquidHopsLen := int(liquidHops.Get("#").Int())
@@ -90,16 +81,26 @@ func getBitcoinRoute(
 			}
 		}
 
-		return map[string]interface{}{"route": allHops}, nil
+		// send payment
+		resp, err := p.Client.Call("sendpay", allHops,
+			inv.Get("payment_hash").String(),
+			inv.Get("label").String(),
+			msatoshiToPay,
+			params.Get("bolt11").String(),
+			inv.Get("payment_secret").String())
+		if err != nil {
+			if errc, ok := err.(lightning.ErrorCommand); ok {
+				return nil, errc.Code, errc
+			}
+			return nil, 120, err
+		}
+		return resp.Value(), 0, nil
 
 	case <-time.After(time.Second * 3):
 		// no route.
 	}
 
-	return nil, &lightning.ErrorCommand{
-		Code:    -1,
-		Message: "Bridge took too long to reply with a route.",
-	}
+	return nil, 119, errors.New("didn't get a route reply from bridge.")
 }
 
 func custommsg(p *plugin.Plugin, params plugin.Params) (resp interface{}) {

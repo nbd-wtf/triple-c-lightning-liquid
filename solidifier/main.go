@@ -19,11 +19,23 @@ func main() {
 		Options: []plugin.Option{
 			{"tcll-bridge-id", "string", "", "Id of the bridge node (the bridge node is actually two different nodes, but using the same seed)"},
 		},
-		Hooks: []plugin.Hook{
+		RPCMethods: []plugin.RPCMethod{
 			{
-				"rpc_command",
-				rpc_command,
+				"bitcoin_invoice",
+				"msatoshi label description [expiry] [preimage]",
+				"Generates an invoice that can be used by Lightning wallets on the Bitcoin network instead of by those on the Liquid network.",
+				"",
+				bitcoin_invoice,
 			},
+			{
+				"bitcoin_pay",
+				"bolt11 [msatoshi] [label] [riskfactor] [maxfeepercent] [retry_for] [maxdelay] [exemptfee]",
+				"Accepts notifications from the other node which we're bridging payments with.",
+				"",
+				bitcoin_pay,
+			},
+		},
+		Hooks: []plugin.Hook{
 			{
 				"custommsg",
 				custommsg,
